@@ -10,8 +10,7 @@ class InputReport:
     """
     def __init__(self, data=None):
         if not data:
-            # TODO: not enough space for NFC/IR data input report
-            self.data = [0x00] * 51
+            self.data = [0x00] * 363
             # all input reports are prepended with 0xA1
             self.data[0] = 0xA1
         else:
@@ -67,8 +66,8 @@ class InputReport:
         """
         Sets the joystick status bytes
         """
-        self.set_left_analog_stick(bytes(left_stick))
-        self.set_right_analog_stick(bytes(right_stick))
+        self.set_left_analog_stick(bytes(left_stick) if left_stick else bytes(3))
+        self.set_right_analog_stick(bytes(right_stick) if right_stick else bytes(3))
 
     def set_left_analog_stick(self, left_stick_bytes):
         """
@@ -112,6 +111,13 @@ class InputReport:
         # HACK: Set all 0 for now
         for i in range(14, 50):
             self.data[i] = 0x00
+
+    def set_ir_nfc_data(self, data):
+        if len(data) > 313:
+            raise ValueError(f'Too much data {len(data)} > 313.')
+        elif len(data) != 313:
+            print("warning : too short mcu data")
+        self.data[50:50+len(data)] = data
 
     def reply_to_subcommand_id(self, _id):
         if isinstance(_id, SubCommand):
@@ -195,15 +201,25 @@ class InputReport:
             return bytes(self.data[:51])
         elif _id == 0x30:
             return bytes(self.data[:14])
+        elif _id == 0x31:
+            return bytes(self.data[:363])
         else:
-            return bytes(self.data)
+            return bytes(self.data[:51])
+
+    def __str__(self):
+        _id = f'Input {self.get_input_report_id():x}'
+        _info = ''
+        if self.get_input_report_id() == 0x21:
+            _info = self.get_reply_to_subcommand_id()
+        _bytes = ' '.join(f'{byte:x}' for byte in bytes(self))
+
+        return f'{_id} {_info}\n{_bytes}'
 
 
 class SubCommand(Enum):
     REQUEST_DEVICE_INFO = 0x02
     SET_INPUT_REPORT_MODE = 0x03
     TRIGGER_BUTTONS_ELAPSED_TIME = 0x04
-    SET_HCI_STATE = 0x06                    # Added for switchX
     SET_SHIPMENT_STATE = 0x08
     SPI_FLASH_READ = 0x10
     SET_NFC_IR_MCU_CONFIG = 0x21
@@ -216,6 +232,7 @@ class SubCommand(Enum):
 class OutputReportID(Enum):
     SUB_COMMAND = 0x01
     RUMBLE_ONLY = 0x10
+    REQUEST_IR_NFC_MCU = 0x11
 
 
 class OutputReport:
@@ -299,3 +316,12 @@ class OutputReport:
 
     def __bytes__(self):
         return bytes(self.data)
+
+    def __str__(self):
+        _id = f'Output {self.get_output_report_id()}'
+        _info = ''
+        if self.get_output_report_id() == OutputReportID.SUB_COMMAND:
+            _info = self.get_sub_command()
+        _bytes = ' '.join(f'{byte:x}' for byte in bytes(self))
+
+        return f'{_id} {_info}\n{_bytes}'
